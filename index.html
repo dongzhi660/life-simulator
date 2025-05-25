@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人生模拟器 - 优化版</title>
+    <style>
+        /* 响应式布局 */
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        /* 状态进度条 */
+        .status-bar {
+            background: #eee;
+            border-radius: 10px;
+            margin: 10px 0;
+            padding: 10px;
+        }
+        .progress {
+            height: 20px;
+            border-radius: 10px;
+            transition: width 0.3s;
+        }
+        #health .progress { background: #4CAF50; }
+        #happiness .progress { background: #FFC107; }
+
+        /* 按钮布局 */
+        .choices {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        }
+        button {
+            padding: 12px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+
+        /* 事件日志 */
+        #event-log {
+            height: 200px;
+            overflow-y: auto;
+            background: white;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="game">
+        <h1 id="player-name"></h1>
+        <div class="status-bar" id="health">
+            <div class="progress" style="width: 100%"></div>
+            <div>健康: <span id="health-value">100</span>/100</div>
+        </div>
+        <div class="status-bar" id="happiness">
+            <div class="progress" style="width: 100%"></div>
+            <div>快乐: <span id="happiness-value">100</span>/100</div>
+        </div>
+        <div>💰 财富: <span id="money">0</span></div>
+        
+        <div id="event-log"></div>
+        <div class="choices" id="choices"></div>
+    </div>
+
+    <script>
+        // 游戏核心逻辑
+        class LifeSimulator {
+            constructor() {
+                this.name = '';
+                this.age = 0;
+                this.health = 100;
+                this.happiness = 100;
+                this.money = 0;
+                this.startYear = new Date().getFullYear() - Math.floor(Math.random() * 100);
+                this.events = [];
+                this.alive = true;
+            }
+
+            // 属性更新器（自动限制范围）
+            updateAttribute(value, min, max) {
+                return Math.max(min, Math.min(value, max));
+            }
+
+            // 年龄阶段验证
+            getAgeStage() {
+                if (this.age < 6) return '幼儿期';
+                if (this.age < 18) return '青少年';
+                if (this.age < 65) return '成年期';
+                return '老年期';
+            }
+
+            // 获取可选动作
+            getAvailableChoices() {
+                const stages = {
+                    '幼儿期': ['玩耍', '学习', '休息'],
+                    '青少年': ['上学', '运动', '兼职'],
+                    '成年期': ['工作', '社交', '投资', '结婚'],
+                    '老年期': ['退休', '养生', '带孙子']
+                };
+                return stages[this.getAgeStage()] || [];
+            }
+
+            // 处理玩家选择
+            handleChoice(choice) {
+                const effects = {
+                    '工作':    { money: 80,  happiness: -20, health: -15 },
+                    '玩耍':    { happiness: 25, health: 5 },
+                    '学习':    { happiness: -10, money: -30 },
+                    '休息':    { health: 20, happiness: 10 },
+                    '投资':    { money: Math.random() > 0.5 ? 200 : -150 }
+                };
+
+                // 应用效果
+                Object.entries(effects[choice] || {}).forEach(([key, value]) => {
+                    this[key] = this.updateAttribute(this[key] + value, 0, 100);
+                });
+
+                // 记录事件
+                this.recordEvent(choice);
+                this.checkRandomEvent();
+                this.checkDeath();
+            }
+
+            // 随机事件系统
+            checkRandomEvent() {
+                if (Math.random() < 0.3) {
+                    const events = {
+                        '幼儿期': [
+                            { msg: "你得了重感冒", health: -25 },
+                            { msg: "发现绘画天赋", happiness: 15 }
+                        ],
+                        '青少年': [
+                            { msg: "校园霸凌事件", happiness: -30 },
+                            { msg: "获得奖学金", money: 500 }
+                        ],
+                        // ...其他阶段事件
+                    };
+                    
+                    const event = events[this.getAgeStage()]?.[Math.floor(Math.random()*2)];
+                    if (event) {
+                        Object.entries(event).forEach(([key, value]) => {
+                            if (key !== 'msg') this[key] += value;
+                        });
+                        this.recordEvent(event.msg);
+                    }
+                }
+            }
+
+            // 死亡检查
+            checkDeath() {
+                let deathRisk = 0;
+                if (this.health <= 0) deathRisk = 1;
+                if (this.age > 80) deathRisk += (this.age - 80) * 0.1;
+                
+                if (Math.random() < deathRisk) {
+                    this.alive = false;
+                    this.recordEvent("💀 生命终结");
+                }
+            }
+
+            recordEvent(msg) {
+                this.events.push(`${this.age}岁: ${msg}`);
+            }
+        }
+
+        // 游戏界面控制器
+        class GameUI {
+            constructor() {
+                this.game = new LifeSimulator();
+                this.init();
+            }
+
+            init() {
+                this.game.name = prompt("请输入角色姓名", "张三");
+                this.game.startYear = new Date().getFullYear() - this.game.age;
+                this.updateUI();
+                this.nextYear();
+            }
+
+            updateUI() {
+                // 更新数值显示
+                document.getElementById('health-value').textContent = this.game.health;
+                document.getElementById('happiness-value').textContent = this.game.happiness;
+                document.getElementById('money').textContent = this.game.money;
+                
+                // 更新进度条
+                document.querySelector('#health .progress').style.width = `${this.game.health}%`;
+                document.querySelector('#happiness .progress').style.width = `${this.game.happiness}%`;
+
+                // 更新事件日志
+                const eventLog = document.getElementById('event-log');
+                eventLog.innerHTML = this.game.events.slice(-5).join('<br>');
+                eventLog.scrollTop = eventLog.scrollHeight;
+            }
+
+            nextYear() {
+                if (!this.game.alive) return this.gameOver();
+
+                this.game.age++;
+                this.renderChoices();
+                this.updateUI();
+            }
+
+            renderChoices() {
+                const container = document.getElementById('choices');
+                container.innerHTML = this.game.getAvailableChoices()
+                    .map(choice => `<button onclick="ui.handleChoice('${choice}')">${choice}</button>`)
+                    .join('');
+            }
+
+            handleChoice(choice) {
+                this.game.handleChoice(choice);
+                this.nextYear();
+            }
+
+            gameOver() {
+                document.getElementById('choices').innerHTML = `
+                    <h3>游戏结束</h3>
+                    <p>${this.game.name}享年 ${this.game.age} 岁</p>
+                    <button onclick="location.reload()">重新开始</button>
+                `;
+            }
+        }
+
+        // 启动游戏
+        const ui = new GameUI();
+    </script>
+</body>
+</html>
